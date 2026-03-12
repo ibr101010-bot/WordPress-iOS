@@ -461,9 +461,9 @@ extension JetpackThreatContext {
 
             if let highlights = line.highlights {
 
-                numberAttr.applyAttributes(config.highlightedNumberAttributes)
+                numberAttr.addAttributes(config.highlightedNumberAttributes)
 
-                contentsAttr.applyAttributes(config.highlightedContentsAttributes)
+                contentsAttr.addAttributes(config.highlightedContentsAttributes)
 
                 for highlight in highlights {
                     let location = highlight.location
@@ -474,9 +474,9 @@ extension JetpackThreatContext {
                 }
 
             } else {
-                numberAttr.applyAttributes(config.numberAttributes)
+                numberAttr.addAttributes(config.numberAttributes)
 
-                contentsAttr.applyAttributes(config.contentsAttributes)
+                contentsAttr.addAttributes(config.contentsAttributes)
             }
 
             attrString.append(numberAttr)

@@ -177,7 +177,7 @@ final class BloggingRemindersFlowCompletionViewController: UIViewController {
 
         let promptText = NSMutableAttributedString(attributedString: formatter.longScheduleDescription(for: schedule, time: scheduler.scheduledTime(for: blog).toLocalTime()))
 
-        promptText.applyAttributes(defaultAttributes)
+        promptText.addAttributes(defaultAttributes)
         promptLabel.attributedText = promptText
     }
 

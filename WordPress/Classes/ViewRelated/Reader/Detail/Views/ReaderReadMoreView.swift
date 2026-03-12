@@ -26,7 +26,7 @@ final class ReaderReadMoreView: UIView, UIAdaptivePresentationControllerDelegate
             .font: UIFont.preferredFont(forTextStyle: .body)
         ])
         if let postURL = post.permaLink.flatMap(URL.init) {
-            string.applyAttribute(.link, value: postURL)
+            string.addAttribute(.link, value: postURL)
             self.postURL = postURL
         }
         textView.attributedText = string
