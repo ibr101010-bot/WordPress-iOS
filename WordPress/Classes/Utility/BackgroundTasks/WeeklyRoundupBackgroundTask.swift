@@ -738,9 +738,8 @@ class WeeklyRoundupNotificationScheduler {
     }
 
     func cancelStaticNotification(completion: @escaping (Bool) -> Void = { _ in }) {
-        userNotificationCenter.getPendingNotificationRequests { _ in
-            completion(true)
-        }
+        userNotificationCenter.removePendingNotificationRequests(withIdentifiers: [staticNotificationIdentifier])
+        completion(true)
     }
 
     func notificationTitle(_ siteTitle: String?) -> String {
