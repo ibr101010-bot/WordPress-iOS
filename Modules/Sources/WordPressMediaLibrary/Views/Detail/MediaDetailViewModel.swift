@@ -31,9 +31,25 @@ final class MediaDetailViewModel: ObservableObject {
     private var inFlightSaveTask: [MediaEditableField: Task<Void, Never>] = [:]
     private var shareTask: Task<Void, Never>?
 
+    /// Payload presented in `UIActivityViewController`. `cleanup` is the
+    /// service-supplied closure that removes the temp scope owning `urls`;
+    /// `cleanupTemporaryFiles()` invokes it iff non-nil. Ownership is
+    /// explicit — never inferred from URL paths — so a custom share service
+    /// that returns URLs from outside its own scope cannot accidentally
+    /// trigger deletion.
     struct SharePayload: Identifiable {
         let id = UUID()
         let urls: [URL]
+        private let cleanup: (@Sendable () -> Void)?
+
+        init(urls: [URL], cleanup: (@Sendable () -> Void)? = nil) {
+            self.urls = urls
+            self.cleanup = cleanup
+        }
+
+        func cleanupTemporaryFiles() {
+            cleanup?()
+        }
     }
 
     init(
@@ -201,12 +217,19 @@ final class MediaDetailViewModel: ObservableObject {
 
     private func performShare(item: DownloadableMediaItem) async {
         do {
-            let urls = try await shareService.downloadForSharing(items: [item])
-            try Task.checkCancellation()
+            let result = try await shareService.downloadForSharing(items: [item])
+            if Task.isCancelled {
+                // Cancelled between the download finishing and this hop; the
+                // payload will never present, so release its files here.
+                result.cleanup?()
+                isSharing = false
+                return
+            }
             isSharing = false
-            sharePayload = SharePayload(urls: urls)
+            sharePayload = SharePayload(urls: result.urls, cleanup: result.cleanup)
         } catch is CancellationError {
-            // User-initiated cancellation is not an error.
+            // User-initiated cancellation is not an error. The adapter
+            // removes its batch directory when the download throws.
             isSharing = false
         } catch let error as URLError where error.code == .cancelled {
             // URLSession surfaces task cancellation as URLError(.cancelled).
@@ -219,6 +242,7 @@ final class MediaDetailViewModel: ObservableObject {
     }
 
     func reportShareDismissed(completed: Bool) {
+        sharePayload?.cleanupTemporaryFiles()
         sharePayload = nil
         if completed {
             tracker.track(.mediaLibrarySharedItemLink)

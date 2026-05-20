@@ -91,6 +91,12 @@ actor BlockingAndThenFailFakeUploadTransport: MediaUploadTransport {
 
 // MARK: - MediaWithEditContext fixture
 
+private final class TestMediaDetails: MediaDetails {
+    override func parseAsMimeType(mimeType: String) -> MediaDetailsPayload? {
+        nil
+    }
+}
+
 extension MediaWithEditContext {
     static func fixture(
         id: Int64 = 9999,
@@ -123,7 +129,7 @@ extension MediaWithEditContext {
             description: MediaDescriptionWithEditContext(raw: "", rendered: ""),
             mediaType: .file,
             mimeType: mimeType,
-            mediaDetails: MediaDetails(noHandle: .init()),
+            mediaDetails: TestMediaDetails(noHandle: .init()),
             postId: nil,
             sourceUrl: sourceUrl,
             missingImageSizes: []
