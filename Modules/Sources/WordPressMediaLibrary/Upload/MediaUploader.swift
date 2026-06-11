@@ -461,7 +461,8 @@ private struct InternalPending {
             id: id,
             displayName: materialized?.displayName ?? displayName,
             kind: materialized?.kind ?? kind,
-            progress: overallProgress
+            progress: overallProgress,
+            localFileURL: materialized?.tempFileURL
         )
     }
 }
@@ -479,7 +480,8 @@ private struct InternalFailed {
             displayName: materialized?.displayName ?? displayName,
             kind: materialized?.kind ?? kind,
             errorMessage: errorMessage,
-            isRetryable: materialized != nil
+            isRetryable: materialized != nil,
+            localFileURL: materialized?.tempFileURL
         )
     }
 }
