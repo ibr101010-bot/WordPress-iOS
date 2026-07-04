@@ -16,13 +16,23 @@ final class MediaDetailViewModel: ObservableObject {
     @Published var saveErrorMessage: String?
     @Published var deleteErrorMessage: String?
     @Published var shareErrorMessage: String?
+    /// Cleanup chokepoint: whatever payload leaves this slot gets its temp
+    /// files released. Every dismissal path nils (or replaces) the property,
+    /// including the one that bypasses the activity controller entirely: an
+    /// interactive swipe-dismiss tears down the SwiftUI sheet without firing
+    /// `completionWithItemsHandler`, so no completion-side cleanup can run.
     @Published var sharePayload: SharePayload? {
-        didSet { isSharePayloadPresented = false }
+        didSet {
+            if let oldValue, oldValue.id != sharePayload?.id {
+                oldValue.cleanupTemporaryFiles()
+            }
+            isSharePayloadPresented = false
+        }
     }
     /// True once the activity sheet for the current `sharePayload` has
     /// actually appeared. Any reassignment of `sharePayload` resets it.
     /// `viewDidDisappear()` uses it to tell an un-presented payload (safe
-    /// to clean up) from one an active activity sheet is still using.
+    /// to release) from one an active activity sheet is still using.
     private var isSharePayloadPresented = false
     @Published private(set) var shouldPop: Bool = false
 
@@ -237,8 +247,7 @@ final class MediaDetailViewModel: ObservableObject {
     /// switch) is left alone; the sheet's completion handler owns it.
     func viewDidDisappear() {
         cancelShare()
-        if let payload = sharePayload, !isSharePayloadPresented {
-            payload.cleanupTemporaryFiles()
+        if sharePayload != nil, !isSharePayloadPresented {
             sharePayload = nil
         }
     }
@@ -269,13 +278,12 @@ final class MediaDetailViewModel: ObservableObject {
         }
     }
 
+    /// Called from the activity controller's `completionWithItemsHandler`.
     /// Takes the payload the sheet actually presented (captured by the sheet
-    /// content closure) rather than reading `sharePayload`: an interactive
-    /// swipe-dismiss nils the published binding before the activity sheet's
-    /// completion handler runs, which would otherwise skip cleanup and leak
-    /// the media-share-<UUID> temp dir.
+    /// content closure) so a swipe-dismiss that nils the published binding
+    /// first can't make the identity check match a different payload. The
+    /// actual temp-file release happens in `sharePayload`'s `didSet`.
     func reportShareDismissed(_ payload: SharePayload, completed: Bool) {
-        payload.cleanupTemporaryFiles()
         if sharePayload?.id == payload.id {
             sharePayload = nil
         }

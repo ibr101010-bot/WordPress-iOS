@@ -110,8 +110,19 @@ final class MediaLibraryViewModel: ObservableObject {
 
     /// Activity-sheet payload. Set by `performBulkShare` on success;
     /// presented via `.sheet(item:)`. Nilled in `reportShareDismissed` or
-    /// `exitSelectionMode`.
-    @Published var sharePayload: MediaDetailViewModel.SharePayload?
+    /// `exitSelectionMode`. Cleanup chokepoint: whatever payload leaves this
+    /// slot gets its temp files released. Every dismissal path nils (or
+    /// replaces) the property, including the one that bypasses the activity
+    /// controller entirely: an interactive swipe-dismiss tears down the
+    /// SwiftUI sheet without firing `completionWithItemsHandler`, so no
+    /// completion-side cleanup can run.
+    @Published var sharePayload: MediaDetailViewModel.SharePayload? {
+        didSet {
+            if let oldValue, oldValue.id != sharePayload?.id {
+                oldValue.cleanupTemporaryFiles()
+            }
+        }
+    }
 
     /// Bulk-delete failure message, presented as an alert. Set when the
     /// confirmed delete fails wholesale or partially; cleared by the view.
@@ -349,7 +360,6 @@ final class MediaLibraryViewModel: ObservableObject {
         bulkShareTask?.cancel()
         bulkShareTask = nil
         bulkShareRequest = nil
-        sharePayload?.cleanupTemporaryFiles()
         sharePayload = nil
         isSelectionModeActive = false
         selectedIDs.removeAll()
@@ -538,16 +548,15 @@ final class MediaLibraryViewModel: ObservableObject {
         }
     }
 
-    /// Called from the `ShareSheetRepresentable` completion handler. Takes
-    /// the payload the sheet actually presented (captured by the sheet
-    /// content closure) rather than reading `sharePayload`, because an
-    /// interactive swipe-dismiss nils the published binding before the
-    /// completion handler runs, which would skip cleanup.
+    /// Called from the activity controller's `completionWithItemsHandler`.
+    /// Takes the payload the sheet actually presented (captured by the sheet
+    /// content closure) so a swipe-dismiss that nils the published binding
+    /// first can't make the identity check match a different payload. The
+    /// actual temp-file release happens in `sharePayload`'s `didSet`.
     /// V1 bulk parity: completed share exits selection mode; cancelled
     /// activity sheet keeps selection intact for retry. Neither path fires
     /// `.mediaLibrarySharedItemLink`; that event is V1-single-item only.
     func reportShareDismissed(_ payload: MediaDetailViewModel.SharePayload, completed: Bool) {
-        payload.cleanupTemporaryFiles()
         if sharePayload?.id == payload.id {
             sharePayload = nil
         }
