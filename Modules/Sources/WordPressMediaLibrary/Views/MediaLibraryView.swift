@@ -22,10 +22,14 @@ struct MediaLibraryView: View {
     /// value 0 is ignored so we don't double-load on appearance.
     @State private var retryToken = 0
     @State private var activePicker: ActivePicker?
+    /// Drives `.fileImporter` directly rather than through `ActivePicker`:
+    /// the importer needs a real binding it can write `false` into on user
+    /// cancel, which never invokes `onCompletion`.
+    @State private var isImportingFile = false
     @State private var isPresentingUploads = false
 
     private enum ActivePicker: Hashable, Identifiable {
-        case photoLibrary, takePhoto, takeVideo, chooseFile
+        case photoLibrary, takePhoto, takeVideo
         case external(id: String)
         var id: Self { self }
     }
@@ -130,26 +134,23 @@ struct MediaLibraryView: View {
                     onCancel: { activePicker = nil }
                 )
                 .ignoresSafeArea()
-            case .chooseFile:
-                EmptyView()
-                    .fileImporter(
-                        isPresented: .constant(true),
-                        allowedContentTypes: viewModel.uploader?.filePickerContentTypes ?? [],
-                        allowsMultipleSelection: true,
-                        onCompletion: { result in
-                            activePicker = nil
-                            if case .success(let urls) = result {
-                                let sources = urls.map { UploadSource.file($0) }
-                                Task { await viewModel.enqueue(sources: sources) }
-                            }
-                        }
-                    )
             case .external(let id):
                 if let option = externalPickerOptions.first(where: { $0.id == id }) {
                     option.sheetContent(viewModel)
                 }
             }
         }
+        .fileImporter(
+            isPresented: $isImportingFile,
+            allowedContentTypes: viewModel.uploader?.filePickerContentTypes ?? [],
+            allowsMultipleSelection: true,
+            onCompletion: { result in
+                if case .success(let urls) = result {
+                    let sources = urls.map { UploadSource.file($0) }
+                    Task { await viewModel.enqueue(sources: sources) }
+                }
+            }
+        )
     }
 
     @ToolbarContentBuilder private var filterMenu: some ToolbarContent {
@@ -206,7 +207,7 @@ struct MediaLibraryView: View {
                     }
                 }
                 Button(Strings.addMenuChooseFile, systemImage: "folder") {
-                    activePicker = .chooseFile
+                    isImportingFile = true
                 }
                 if !externalPickerOptions.isEmpty {
                     Section {
