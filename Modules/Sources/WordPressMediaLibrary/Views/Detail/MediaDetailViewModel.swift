@@ -16,7 +16,14 @@ final class MediaDetailViewModel: ObservableObject {
     @Published var saveErrorMessage: String?
     @Published var deleteErrorMessage: String?
     @Published var shareErrorMessage: String?
-    @Published var sharePayload: SharePayload?
+    @Published var sharePayload: SharePayload? {
+        didSet { isSharePayloadPresented = false }
+    }
+    /// True once the activity sheet for the current `sharePayload` has
+    /// actually appeared. Any reassignment of `sharePayload` resets it.
+    /// `viewDidDisappear()` uses it to tell an un-presented payload (safe
+    /// to clean up) from one an active activity sheet is still using.
+    private var isSharePayloadPresented = false
     @Published private(set) var shouldPop: Bool = false
 
     let capabilities: MediaLibraryCapabilities
@@ -213,6 +220,27 @@ final class MediaDetailViewModel: ObservableObject {
     /// spinner in the toolbar and to the screen's disappearance.
     func cancelShare() {
         shareTask?.cancel()
+    }
+
+    /// Marks the current `sharePayload` as presented. Wired to the activity
+    /// sheet content's appearance.
+    func shareSheetDidPresent() {
+        isSharePayloadPresented = true
+    }
+
+    /// Screen-teardown hook. Cancels an in-flight download, and releases a
+    /// payload whose activity sheet never presented: when the download
+    /// finishes just as the screen pops, `performShare` assigns
+    /// `sharePayload` before `onDisappear` fires, and without this pass no
+    /// code path would ever invoke that payload's cleanup closure. A payload
+    /// whose sheet is up (e.g. the screen left the window because of a tab
+    /// switch) is left alone; the sheet's completion handler owns it.
+    func viewDidDisappear() {
+        cancelShare()
+        if let payload = sharePayload, !isSharePayloadPresented {
+            payload.cleanupTemporaryFiles()
+            sharePayload = nil
+        }
     }
 
     private func performShare(item: DownloadableMediaItem) async {
