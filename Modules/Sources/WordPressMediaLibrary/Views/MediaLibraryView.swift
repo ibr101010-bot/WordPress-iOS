@@ -220,10 +220,6 @@ struct MediaLibraryView: View {
                 viewModel.reportShareDismissed(payload, completed: completed)
             }
         }
-        .task(id: viewModel.bulkShareRequest?.id) { [request = viewModel.bulkShareRequest] in
-            guard let request else { return }
-            await viewModel.performBulkShare(request)
-        }
         .sheet(item: $activePicker) { picker in
             switch picker {
             case .photoLibrary:

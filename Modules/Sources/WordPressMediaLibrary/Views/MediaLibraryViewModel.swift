@@ -92,12 +92,17 @@ final class MediaLibraryViewModel: ObservableObject {
     /// (both success and failure paths) for pagination safety.
     @Published private(set) var pendingDeleteIDs: Set<Int64> = []
 
-    /// Identity for the currently-active bulk-share download. The view's
-    /// `.task(id: bulkShareRequest?.id)` modifier owns the download task;
-    /// flipping the id to nil cancels it cooperatively. The preparing-vs-idle
-    /// UI state is derived from this (see `isPreparingBulkShare`), so the two
-    /// can never drift out of lockstep.
+    /// Identity for the currently-active bulk-share download, which runs in
+    /// the VM-owned `bulkShareTask` so it survives the view leaving the
+    /// window (e.g. a tab switch); `exitSelectionMode()` cancels it
+    /// explicitly. The preparing-vs-idle UI state is derived from this (see
+    /// `isPreparingBulkShare`), so the two can never drift out of lockstep.
     @Published private(set) var bulkShareRequest: BulkShareRequest?
+
+    /// Owns the bulk-share download so its lifetime is the view model's,
+    /// not the view's; a view-lifetime `.task` would be cancelled by any
+    /// disappearance and silently drop the preparation.
+    private var bulkShareTask: Task<Void, Never>?
 
     /// True while a bulk-share download is in flight. Derived from
     /// `bulkShareRequest` so there is a single source of truth.
@@ -337,11 +342,12 @@ final class MediaLibraryViewModel: ObservableObject {
     }
 
     func exitSelectionMode() {
-        // Nil bulkShareRequest (which also flips isPreparingBulkShare back to
-        // false). Without this, a Done tap before SwiftUI enters `.task(id:)`'s
-        // body would leave the share UI stuck in its preparing state. Nils
+        // Cancel the in-flight bulk-share download and nil bulkShareRequest
+        // (which also flips isPreparingBulkShare back to false). Nils
         // sharePayload too, closing the race where downloads finish and the
         // activity sheet is about to present when the user taps Done.
+        bulkShareTask?.cancel()
+        bulkShareTask = nil
         bulkShareRequest = nil
         sharePayload?.cleanupTemporaryFiles()
         sharePayload = nil
@@ -479,16 +485,24 @@ final class MediaLibraryViewModel: ObservableObject {
             )
         }
         tracker.track(.siteMediaShareTapped(count: items.count))
-        bulkShareRequest = BulkShareRequest(items: items)
+        let request = BulkShareRequest(items: items)
+        bulkShareRequest = request
+        // The handle is deliberately not cleared on completion: a stale
+        // task's trailing write could clobber a newer task's handle and
+        // leave it uncancellable, while a finished task kept around is
+        // inert (cancelling it is a no-op). The next share or exit
+        // overwrites it.
+        bulkShareTask = Task { [weak self] in
+            await self?.performBulkShare(request)
+        }
     }
 
-    /// Runs the bulk-share download. Called from the view's
-    /// `.task(id: bulkShareRequest?.id)` modifier; SwiftUI auto-cancels on
-    /// id change (e.g., when `exitSelectionMode()` clears the request).
-    /// Cleanup and `sharePayload` publication are request-id-scoped: a
-    /// stale cancelled task that unwinds after a newer request started
-    /// will NOT clobber the newer request's state.
-    func performBulkShare(_ request: BulkShareRequest) async {
+    /// Runs the bulk-share download inside the VM-owned `bulkShareTask`;
+    /// `exitSelectionMode()` cancels it. Cleanup and `sharePayload`
+    /// publication are request-id-scoped: a stale cancelled task that
+    /// unwinds after a newer request started will NOT clobber the newer
+    /// request's state.
+    private func performBulkShare(_ request: BulkShareRequest) async {
         defer {
             if bulkShareRequest?.id == request.id {
                 bulkShareRequest = nil
