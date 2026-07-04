@@ -149,8 +149,9 @@ final class MediaLibraryViewModel: ObservableObject {
         let items: [DownloadableMediaItem]
     }
 
-    /// Guards re-entrant loads. Safe because each instance owns one collection,
-    /// so a skipped re-entrant call never loses a distinct load.
+    /// Serializes loads: `load()` waits for an in-flight (possibly cancelled
+    /// and still-unwinding) load to finish before starting, because each
+    /// instance owns one collection.
     private var isLoading = false
 
     /// Pure type-filter, extracted so it can be unit-tested directly with
@@ -542,7 +543,14 @@ final class MediaLibraryViewModel: ObservableObject {
     // MARK: Load (eager)
 
     func load() async {
-        guard !isLoading else { return }
+        // A cancelled predecessor may still be unwinding (its defer hasn't
+        // reset `isLoading` yet) when a replacement load starts; wait for it
+        // instead of dropping this call, so a task restart can't strand the
+        // library half-loaded with `isLoadComplete` stuck false.
+        while isLoading {
+            if Task.isCancelled { return }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
         isLoading = true
         defer { isLoading = false }
 
