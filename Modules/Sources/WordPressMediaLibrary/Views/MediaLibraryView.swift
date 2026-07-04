@@ -15,11 +15,9 @@ struct MediaLibraryView: View {
     let client: WordPressClient
     let tracker: any MediaTracker
     var externalPickerOptions: [ExternalMediaPickerOption] = []
-    /// When the host app shows a bottom tab bar (e.g. Jetpack), the search
-    /// field minimizes into a toolbar button so it doesn't stack a second bar
-    /// at the bottom of the screen. Without a tab bar (e.g. WordPress, iPad
-    /// split view) it stays a full-width search bar.
-    var prefersMinimizedSearchBar = false
+    /// Containment facts (bottom tab bar presence, pop notification) derived
+    /// by the hosting controller; drives the minimized-search-bar behavior.
+    @ObservedObject var hostContext: MediaLibraryHostContext
 
     @State private var searchText = ""
     @State private var isAspectRatioMode = AspectRatioPreference.load()
@@ -116,7 +114,7 @@ struct MediaLibraryView: View {
                 isSuppressed: viewModel.isSelectionModeActive,
                 text: $searchText,
                 prompt: Strings.searchPrompt,
-                minimized: prefersMinimizedSearchBar
+                minimized: hostContext.prefersMinimizedSearchBar
             )
         )
         .autocorrectionDisabled()
