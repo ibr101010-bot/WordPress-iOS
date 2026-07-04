@@ -4,12 +4,19 @@ import OrderedCollections
 import UniformTypeIdentifiers
 import WordPressAPI
 import WordPressCore
+import os
 
 public actor MediaUploader {
-    nonisolated let filePickerContentTypes: [UTType]
+    /// UTTypes the document picker offers. Lock-backed rather than actor
+    /// state so SwiftUI can read it synchronously; refreshed by
+    /// `updatePolicy(_:)`.
+    nonisolated var filePickerContentTypes: [UTType] {
+        _filePickerContentTypes.withLock { $0 }
+    }
+    private nonisolated let _filePickerContentTypes: OSAllocatedUnfairLock<[UTType]>
 
     private let transport: any MediaUploadTransport
-    private let materializer: any MediaSourceMaterializing
+    private var materializer: any MediaSourceMaterializing
 
     /// Multicasts state to every observer and replays the latest snapshot
     /// to new subscribers, so a re-pushed Media Library screen sees the
@@ -50,7 +57,9 @@ public actor MediaUploader {
     ) {
         self.transport = transport
         self.materializer = UploadSourceMaterializer(policy: policy)
-        self.filePickerContentTypes = policy.filePickerContentTypes
+        self._filePickerContentTypes = OSAllocatedUnfairLock(
+            initialState: policy.filePickerContentTypes
+        )
     }
 
     /// Module-internal test seam.
@@ -61,7 +70,9 @@ public actor MediaUploader {
     ) {
         self.transport = transport
         self.materializer = materializer
-        self.filePickerContentTypes = filePickerContentTypes
+        self._filePickerContentTypes = OSAllocatedUnfairLock(
+            initialState: filePickerContentTypes
+        )
     }
 
     deinit {
@@ -93,6 +104,25 @@ public actor MediaUploader {
 
     func snapshot() -> UploaderState {
         UploaderState(entries: entries.values.map { $0.viewModelValue })
+    }
+
+    /// Applies a fresh policy to all future enqueues, so user-visible settings
+    /// (like stripping GPS locations) take effect without recreating the
+    /// uploader and losing in-flight state. In-flight uploads keep the
+    /// materializer their work task captured at enqueue time and finish under
+    /// the policy that was active when they were enqueued. Retry re-uploads
+    /// the already-materialized bytes and never re-consults the policy.
+    ///
+    /// Replaces the materializer with a default-rooted production one, so do
+    /// not call this on a seam-constructed uploader whose test materializer
+    /// or staging root must stay injected. Basename dedup in the new
+    /// materializer restarts from scratch, which is harmless: a single
+    /// enqueue batch always shares one materializer, and the server enforces
+    /// final filename uniqueness.
+    public func updatePolicy(_ policy: MediaUploadPolicy) {
+        guard !isTornDown else { return }
+        materializer = UploadSourceMaterializer(policy: policy)
+        _filePickerContentTypes.withLock { $0 = policy.filePickerContentTypes }
     }
 
     func enqueue(sources: [UploadSource]) {

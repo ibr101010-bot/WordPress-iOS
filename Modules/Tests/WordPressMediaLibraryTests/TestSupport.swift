@@ -136,11 +136,12 @@ func makeRejectEverythingPolicy() -> MediaUploadPolicy {
     makePolicy(isAllowedForUpload: { _, _ in false })
 }
 
-private func makePolicy(
-    isAllowedForUpload: @escaping @Sendable (UTType, String) -> Bool
+func makePolicy(
+    isAllowedForUpload: @escaping @Sendable (UTType, String) -> Bool = { _, _ in true },
+    filePickerContentTypes: [UTType] = [.content]
 ) -> MediaUploadPolicy {
     MediaUploadPolicy(
-        filePickerContentTypes: [.content],
+        filePickerContentTypes: filePickerContentTypes,
         isAllowedForUpload: isAllowedForUpload,
         imageMaxDimension: nil,
         imageJpegQuality: 0.9,

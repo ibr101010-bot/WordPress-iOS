@@ -578,4 +578,40 @@ struct MediaUploaderTests {
         let uploadCount = await transport.uploadCount
         #expect(uploadCount == 0)
     }
+
+    @Test("updatePolicy applies to enqueues made after the update")
+    func updatePolicyAppliesToNewEnqueues() async throws {
+        let transport = FakeUploadTransport()
+        let uploader = MediaUploader(transport: transport, policy: makeRejectEverythingPolicy())
+
+        let pdfURL = try writeTempPDF()
+        defer { try? FileManager.default.removeItem(at: pdfURL.deletingLastPathComponent()) }
+
+        await uploader.enqueue(sources: [.file(pdfURL)])
+        try await Task.sleep(for: .milliseconds(200))
+
+        let before = await uploader.snapshot()
+        #expect(before.failed.count == 1)
+        let uploadsBefore = await transport.uploadCount
+        #expect(uploadsBefore == 0)
+
+        await uploader.updatePolicy(makeAllowEverythingPolicy())
+        await uploader.enqueue(sources: [.file(pdfURL)])
+        try await Task.sleep(for: .milliseconds(200))
+
+        let uploadsAfter = await transport.uploadCount
+        #expect(uploadsAfter == 1)
+    }
+
+    @Test("updatePolicy refreshes filePickerContentTypes")
+    func updatePolicyRefreshesPickerTypes() async {
+        let uploader = MediaUploader(
+            transport: FakeUploadTransport(),
+            policy: makeAllowEverythingPolicy()
+        )
+        #expect(uploader.filePickerContentTypes == [.content])
+
+        await uploader.updatePolicy(makePolicy(filePickerContentTypes: [.pdf]))
+        #expect(uploader.filePickerContentTypes == [.pdf])
+    }
 }
