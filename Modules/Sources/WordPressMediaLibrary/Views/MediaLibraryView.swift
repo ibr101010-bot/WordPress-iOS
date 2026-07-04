@@ -109,14 +109,19 @@ struct MediaLibraryView: View {
         // and on iOS 26 the minimized search capsule also collided with the
         // bottom selection bar. Clearing searchText on entry guarantees the
         // library grid (not stale search results) is what's selected against.
-        .modifier(
-            SelectionAwareSearch(
-                isSuppressed: viewModel.isSelectionModeActive,
-                text: $searchText,
-                prompt: Strings.searchPrompt,
-                minimized: hostContext.prefersMinimizedSearchBar
-            )
-        )
+        // The conditional `.searchable` hangs off a zero-size background leaf
+        // (its preference still reaches the hosting navigation item) so that
+        // toggling selection mode swaps only that leaf; wrapping the main
+        // content in a ConditionalContent branch instead would reset the
+        // subtree's identity, discarding grid scroll position and re-firing
+        // the load/observe/analytics tasks above.
+        .background {
+            if !viewModel.isSelectionModeActive {
+                Color.clear
+                    .searchable(text: $searchText, prompt: Strings.searchPrompt)
+                    .minimizedSearchToolbarBehavior(hostContext.prefersMinimizedSearchBar)
+            }
+        }
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
         .onChange(of: viewModel.isSelectionModeActive) { _, isActive in
@@ -474,27 +479,6 @@ struct MediaLibraryView: View {
             .buttonStyle(.borderedProminent)
         }
         .padding()
-    }
-}
-
-/// Applies `.searchable` (and the iOS 26 minimize behavior) only when search is
-/// not suppressed. Selection mode suppresses it so the search field can't stay
-/// live underneath the selection toolbar; when `isSuppressed` flips, SwiftUI
-/// adds/removes the search field wholesale.
-private struct SelectionAwareSearch: ViewModifier {
-    let isSuppressed: Bool
-    @Binding var text: String
-    let prompt: String
-    let minimized: Bool
-
-    func body(content: Content) -> some View {
-        if isSuppressed {
-            content
-        } else {
-            content
-                .searchable(text: $text, prompt: prompt)
-                .minimizedSearchToolbarBehavior(minimized)
-        }
     }
 }
 
