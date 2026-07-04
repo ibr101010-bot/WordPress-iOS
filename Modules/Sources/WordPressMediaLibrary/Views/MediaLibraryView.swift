@@ -132,25 +132,6 @@ struct MediaLibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(Strings.commonDone) { viewModel.exitSelectionMode() }
                 }
-                ToolbarItemGroup(placement: .bottomBar) {
-                    if viewModel.detailCapabilities?.supportsDeletion == true {
-                        Button {
-                            isPresentingDeleteConfirm = true
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .accessibilityLabel(Strings.selectionDeleteAccessibilityLabel)
-                        .disabled(viewModel.selectedIDs.isEmpty || viewModel.isPreparingBulkShare)
-                    } else {
-                        Image(systemName: "trash")
-                            .hidden()
-                            .accessibilityHidden(true)
-                    }
-                    Spacer()
-                    Text(viewModel.selectionToolbarTitle).font(.headline)
-                    Spacer()
-                    shareToolbarButton
-                }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(Strings.selectionSelect) { viewModel.enterSelectionMode() }
@@ -161,6 +142,20 @@ struct MediaLibraryView: View {
                 }
                 filterMenu
                 addMenu
+            }
+        }
+        // The selection bar is a safe-area inset, not a
+        // `ToolbarItemGroup(placement: .bottomBar)`: this screen is a
+        // `UIHostingController` pushed on a UIKit navigation controller (no
+        // `NavigationStack` ancestor), and in that arrangement SwiftUI
+        // silently drops bottom-bar toolbar items. Top-bar items bridge
+        // through `navigationItem`, but nothing populates the UIKit toolbar
+        // (V1's `SiteMediaViewController` sets `toolbarItems` +
+        // `setToolbarHidden` by hand). The inset also keeps the last grid
+        // row reachable above the bar.
+        .safeAreaInset(edge: .bottom) {
+            if viewModel.isSelectionModeActive {
+                selectionToolbar
             }
         }
         .navigationBarBackButtonHidden(viewModel.isSelectionModeActive)
@@ -431,6 +426,36 @@ struct MediaLibraryView: View {
         } else if viewModel.shouldDisplayEmpty {
             ContentUnavailableView(Strings.empty, systemImage: "photo.on.rectangle")
         }
+    }
+
+    /// Bottom selection bar (trash / count title / share), presented as a
+    /// safe-area inset while selection mode is active. The hidden trash
+    /// placeholder keeps the title centered when deletion is unsupported.
+    private var selectionToolbar: some View {
+        HStack {
+            if viewModel.detailCapabilities?.supportsDeletion == true {
+                Button {
+                    isPresentingDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(Strings.selectionDeleteAccessibilityLabel)
+                .disabled(viewModel.selectedIDs.isEmpty || viewModel.isPreparingBulkShare)
+            } else {
+                Image(systemName: "trash")
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+            Spacer()
+            Text(viewModel.selectionToolbarTitle).font(.headline)
+            Spacer()
+            shareToolbarButton
+        }
+        .font(.title3)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 
     @ViewBuilder private var shareToolbarButton: some View {
