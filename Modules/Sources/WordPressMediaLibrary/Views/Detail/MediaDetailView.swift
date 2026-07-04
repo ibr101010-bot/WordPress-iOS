@@ -57,7 +57,7 @@ struct MediaDetailView: View {
         }
         .sheet(item: $viewModel.sharePayload) { payload in
             ShareSheetRepresentable(urls: payload.urls) { completed in
-                viewModel.reportShareDismissed(completed: completed)
+                viewModel.reportShareDismissed(payload, completed: completed)
             }
         }
         .onChange(of: viewModel.shouldPop) { _, shouldPop in

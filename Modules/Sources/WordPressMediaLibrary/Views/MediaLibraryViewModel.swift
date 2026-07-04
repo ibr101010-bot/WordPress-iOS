@@ -524,13 +524,19 @@ final class MediaLibraryViewModel: ObservableObject {
         }
     }
 
-    /// Called from the `ShareSheetRepresentable` completion handler.
+    /// Called from the `ShareSheetRepresentable` completion handler. Takes
+    /// the payload the sheet actually presented (captured by the sheet
+    /// content closure) rather than reading `sharePayload`, because an
+    /// interactive swipe-dismiss nils the published binding before the
+    /// completion handler runs, which would skip cleanup.
     /// V1 bulk parity: completed share exits selection mode; cancelled
     /// activity sheet keeps selection intact for retry. Neither path fires
     /// `.mediaLibrarySharedItemLink`; that event is V1-single-item only.
-    func reportShareDismissed(completed: Bool) {
-        sharePayload?.cleanupTemporaryFiles()
-        sharePayload = nil
+    func reportShareDismissed(_ payload: MediaDetailViewModel.SharePayload, completed: Bool) {
+        payload.cleanupTemporaryFiles()
+        if sharePayload?.id == payload.id {
+            sharePayload = nil
+        }
         if completed {
             exitSelectionMode()
         }

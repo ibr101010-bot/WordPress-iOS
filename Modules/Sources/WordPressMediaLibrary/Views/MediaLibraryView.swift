@@ -217,12 +217,7 @@ struct MediaLibraryView: View {
         }
         .sheet(item: $viewModel.sharePayload) { payload in
             ShareSheetRepresentable(urls: payload.urls) { completed in
-                // Clean up via the captured `payload`, not viewModel.sharePayload:
-                // an interactive swipe-dismiss can nil the published binding
-                // before this handler runs, which would otherwise skip cleanup
-                // and leak the media-share-<UUID> temp dir.
-                payload.cleanupTemporaryFiles()
-                viewModel.reportShareDismissed(completed: completed)
+                viewModel.reportShareDismissed(payload, completed: completed)
             }
         }
         .task(id: viewModel.bulkShareRequest?.id) { [request = viewModel.bulkShareRequest] in

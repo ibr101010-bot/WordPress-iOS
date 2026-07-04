@@ -241,9 +241,16 @@ final class MediaDetailViewModel: ObservableObject {
         }
     }
 
-    func reportShareDismissed(completed: Bool) {
-        sharePayload?.cleanupTemporaryFiles()
-        sharePayload = nil
+    /// Takes the payload the sheet actually presented (captured by the sheet
+    /// content closure) rather than reading `sharePayload`: an interactive
+    /// swipe-dismiss nils the published binding before the activity sheet's
+    /// completion handler runs, which would otherwise skip cleanup and leak
+    /// the media-share-<UUID> temp dir.
+    func reportShareDismissed(_ payload: SharePayload, completed: Bool) {
+        payload.cleanupTemporaryFiles()
+        if sharePayload?.id == payload.id {
+            sharePayload = nil
+        }
         if completed {
             tracker.track(.mediaLibrarySharedItemLink)
         }
