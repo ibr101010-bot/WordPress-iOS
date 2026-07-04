@@ -16,11 +16,20 @@ final class MediaUploaderRegistry {
 
     func uploader(for blog: Blog) throws -> MediaUploader {
         let id = TaggedManagedObjectID<Blog>(blog)
-        if let existing = uploaders[id] { return existing }
+        // Built here, before any async hop, because the factory reads the
+        // Blog on its main managed object context; only the Sendable policy
+        // value crosses into the update Task below.
+        let policy = MediaUploadPolicyFactory.make(from: blog)
+        if let existing = uploaders[id] {
+            // MediaSettings (like Remove Location) or refreshed blog options
+            // may have changed since this uploader was cached. Push a fresh
+            // policy so new enqueues honor them.
+            Task { await existing.updatePolicy(policy) }
+            return existing
+        }
 
         let site = try WordPressSite(blog: blog)
         let client = clientFactory.instance(for: site)
-        let policy = MediaUploadPolicyFactory.make(from: blog)
         let uploader = MediaUploader(client: client, policy: policy)
         uploaders[id] = uploader
         return uploader
