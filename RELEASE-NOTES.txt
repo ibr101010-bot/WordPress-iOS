@@ -15,6 +15,7 @@
 * [*] Add App Shortcuts for creating a post and opening Notifications, Stats, and the Reader from Siri, Spotlight, and the Shortcuts app [#25754]
 * [*] Posts and Reader posts can now be found and opened from Siri and the Shortcuts app [#25755]
 * [*] Publish or schedule a post from Siri and the Shortcuts app, with a confirmation before anything goes live [#25756]
+* [*] [internal] Stop donating screen activities as Siri predictions now that App Shortcuts cover them [#25757]
 
 
 27.0
