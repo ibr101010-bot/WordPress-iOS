@@ -3,9 +3,34 @@ import CoreSpotlight
 import MobileCoreServices
 import WordPressData
 
+/// Adopted by `SearchManager` in the Jetpack app (in a Jetpack-only file) to
+/// associate App Intents entities with the Spotlight items it indexes. The
+/// WordPress app exposes no App Intents entities, so the conformance does not
+/// exist there and indexing proceeds without associations.
+protocol SearchableItemEntityAssociating {
+    func associateAppEntities(from item: SearchableItemConvertable, to searchableItem: CSSearchableItem)
+}
+
 /// Encapsulates CoreSpotlight operations for WPiOS
 ///
 @objc class SearchManager: NSObject {
+
+    /// Where a request to open an indexed item came from. Spotlight analytics
+    /// only fire for Spotlight-initiated opens.
+    enum ItemSource {
+        case spotlight
+        case appIntent
+
+        /// The analytics source passed to the post preview screen.
+        var previewAnalyticsSource: String {
+            switch self {
+            case .spotlight:
+                return "spotlight_preview_post"
+            case .appIntent:
+                return "app_intent_preview_post"
+            }
+        }
+    }
 
     // MARK: - Singleton
 
@@ -29,7 +54,14 @@ import WordPressData
     ///   - items: the items to be indexed
     ///
     @objc func indexItems(_ items: [SearchableItemConvertable]) {
-        let items = items.map({ $0.indexableItem() }).compactMap({ $0 })
+        let associating = self as? SearchableItemEntityAssociating
+        let items = items.compactMap { item -> CSSearchableItem? in
+            guard let searchableItem = item.indexableItem() else {
+                return nil
+            }
+            associating?.associateAppEntities(from: item, to: searchableItem)
+            return searchableItem
+        }
         guard !items.isEmpty else {
             return
         }
@@ -188,25 +220,45 @@ import WordPressData
 
     fileprivate func handleCoreSpotlightSearchableActivityType(activity: NSUserActivity) -> Bool {
         guard activity.activityType == CSSearchableItemActionType,
-            let compositeIdentifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+            let compositeIdentifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+            let (itemType, _, _) = SearchIdentifierGenerator.decomposeIfValid(compositeIdentifier),
+            itemType != .none
         else {
             return false
         }
 
-        let (itemType, domainString, identifier) = SearchIdentifierGenerator.decomposeFromUniqueIdentifier(
-            compositeIdentifier
-        )
+        Task { @MainActor in
+            await self.openItem(withUniqueIdentifier: compositeIdentifier, source: .spotlight)
+        }
+        return true
+    }
+
+    /// Opens the content a composite Spotlight identifier points to, with the
+    /// same routing as tapping the item in Spotlight. App Intents share this
+    /// entry point because their entity identifiers use the same format.
+    ///
+    /// - Returns: Whether the target could be resolved and put on screen, so
+    ///   callers can surface a failure instead of reporting success blindly.
+    @discardableResult
+    @MainActor
+    func openItem(withUniqueIdentifier compositeIdentifier: String, source: ItemSource) async -> Bool {
+        guard let (itemType, domainString, identifier) = SearchIdentifierGenerator.decomposeIfValid(compositeIdentifier)
+        else {
+            return false
+        }
+
         switch itemType {
         case .abstractPost:
-            return handleAbstractPost(domainString: domainString, identifier: identifier)
+            return await handleAbstractPost(domainString: domainString, identifier: identifier, source: source)
         case .readerPost:
-            return handleReaderPost(domainString: domainString, identifier: identifier)
-        default:
+            return handleReaderPost(domainString: domainString, identifier: identifier, source: source)
+        case .none:
             return false
         }
     }
 
-    fileprivate func handleAbstractPost(domainString: String, identifier: String) -> Bool {
+    @MainActor
+    fileprivate func handleAbstractPost(domainString: String, identifier: String, source: ItemSource) async -> Bool {
         guard let postID = NumberFormatter().number(from: identifier) else {
             DDLogError(
                 "Search manager unable to parse postID/siteID for identifier:\(identifier) domain:\(domainString)"
@@ -214,36 +266,27 @@ import WordPressData
             return false
         }
 
+        let post: AbstractPost?
+        let isDotCom: Bool
         if let siteID = validWPComSiteID(with: domainString) {
-            fetchPost(
-                postID,
-                blogID: siteID,
-                onSuccess: { [weak self] apost in
-                    self?.navigateToScreen(for: apost)
-                },
-                onFailure: {
-                    DDLogError("Search manager unable to open post - postID:\(postID) siteID:\(siteID)")
-                }
-            )
+            isDotCom = true
+            post = await fetchPost(postID, blogID: siteID)
         } else {
-            fetchSelfHostedPost(
-                postID,
-                blogXMLRpcString: domainString,
-                onSuccess: { [weak self] apost in
-                    self?.navigateToScreen(for: apost, isDotCom: false)
-                },
-                onFailure: {
-                    DDLogError(
-                        "Search manager unable to open self hosted post - postID:\(postID) xmlrpc:\(domainString)"
-                    )
-                }
-            )
+            isDotCom = false
+            post = await fetchSelfHostedPost(postID, blogXMLRpcString: domainString)
         }
 
+        guard let post, post.status != .trash else {
+            DDLogError("Search manager unable to open post - postID:\(postID) domain:\(domainString)")
+            return false
+        }
+
+        navigateToScreen(for: post, isDotCom: isDotCom, source: source)
         return true
     }
 
-    fileprivate func handleReaderPost(domainString: String, identifier: String) -> Bool {
+    @MainActor
+    fileprivate func handleReaderPost(domainString: String, identifier: String, source: ItemSource) -> Bool {
         guard let siteID = validWPComSiteID(with: domainString),
             let readerPostID = NumberFormatter().number(from: identifier)
         else {
@@ -252,19 +295,23 @@ import WordPressData
             )
             return false
         }
-        var properties = [AnyHashable: Any]()
-        properties[WPAppAnalyticsKeyBlogID] = siteID
-        properties[WPAppAnalyticsKeyPostID] = readerPostID
-        WPAppAnalytics.track(.spotlightSearchOpenedReaderPost, withProperties: properties)
+        if source == .spotlight {
+            var properties = [AnyHashable: Any]()
+            properties[WPAppAnalyticsKeyBlogID] = siteID
+            properties[WPAppAnalyticsKeyPostID] = readerPostID
+            WPAppAnalytics.track(.spotlightSearchOpenedReaderPost, withProperties: properties)
+        }
+        var opened = true
         openReader(
             for: readerPostID,
             siteID: siteID,
             onFailure: {
                 DDLogError("Search manager unable to open reader for readerPostID:\(readerPostID) siteID:\(siteID)")
+                opened = false
             }
         )
 
-        return true
+        return opened
     }
 
     fileprivate func handleSite(activity: NSUserActivity) -> Bool {
@@ -308,53 +355,40 @@ fileprivate extension SearchManager {
 
     // MARK: Fetching
 
-    func fetchPost(
-        _ postID: NSNumber,
-        blogID: NSNumber,
-        onSuccess: @escaping (_ post: AbstractPost) -> Void,
-        onFailure: @escaping () -> Void
-    ) {
+    @MainActor
+    func fetchPost(_ postID: NSNumber, blogID: NSNumber) async -> AbstractPost? {
         let coreDataStack = ContextManager.shared
 
         guard let blog = Blog.lookup(withID: blogID, in: coreDataStack.mainContext) else {
-            onFailure()
-            return
+            return nil
         }
-
-        let postRepository = PostRepository(coreDataStack: coreDataStack)
-        Task { @MainActor in
-            do {
-                let postObjectID = try await postRepository.getPost(withID: postID, from: .init(blog))
-                let post = try coreDataStack.mainContext.existingObject(with: postObjectID)
-                onSuccess(post)
-            } catch {
-                onFailure()
-            }
-        }
+        return await fetchPost(postID, for: blog, using: coreDataStack)
     }
 
-    func fetchSelfHostedPost(
-        _ postID: NSNumber,
-        blogXMLRpcString: String,
-        onSuccess: @escaping (_ post: AbstractPost) -> Void,
-        onFailure: @escaping () -> Void
-    ) {
+    @MainActor
+    func fetchSelfHostedPost(_ postID: NSNumber, blogXMLRpcString: String) async -> AbstractPost? {
         let coreDataStack = ContextManager.shared
         guard let blog = Blog.selfHosted(in: coreDataStack.mainContext).first(where: { $0.xmlrpc == blogXMLRpcString })
         else {
-            onFailure()
-            return
+            return nil
+        }
+        return await fetchPost(postID, for: blog, using: coreDataStack)
+    }
+
+    @MainActor
+    func fetchPost(_ postID: NSNumber, for blog: Blog, using coreDataStack: ContextManager) async -> AbstractPost? {
+        // A cached copy opens immediately; the network fetch covers posts
+        // that are indexed but no longer cached locally.
+        if let post = blog.lookupPost(withID: postID, in: coreDataStack.mainContext) {
+            return post
         }
 
         let postRepository = PostRepository(coreDataStack: coreDataStack)
-        Task { @MainActor in
-            do {
-                let postObjectID = try await postRepository.getPost(withID: postID, from: .init(blog))
-                let post = try coreDataStack.mainContext.existingObject(with: postObjectID)
-                onSuccess(post)
-            } catch {
-                onFailure()
-            }
+        do {
+            let postObjectID = try await postRepository.getPost(withID: postID, from: .init(blog))
+            return try coreDataStack.mainContext.existingObject(with: postObjectID)
+        } catch {
+            return nil
         }
     }
 
@@ -434,45 +468,49 @@ fileprivate extension SearchManager {
 
     // MARK: Specific Post & Page Navigation
 
-    func navigateToScreen(for apost: AbstractPost, isDotCom: Bool = true) {
+    func navigateToScreen(for apost: AbstractPost, isDotCom: Bool, source: ItemSource) {
         if let post = apost as? Post {
-            self.navigateToScreen(for: post, isDotCom: isDotCom)
+            self.navigateToScreen(for: post, isDotCom: isDotCom, source: source)
         } else if let page = apost as? Page {
-            self.navigateToScreen(for: page, isDotCom: isDotCom)
+            self.navigateToScreen(for: page, isDotCom: isDotCom, source: source)
         }
     }
 
-    func navigateToScreen(for post: Post, isDotCom: Bool) {
-        WPAppAnalytics.track(.spotlightSearchOpenedPost, post: post)
+    func navigateToScreen(for post: Post, isDotCom: Bool, source: ItemSource) {
+        if source == .spotlight {
+            WPAppAnalytics.track(.spotlightSearchOpenedPost, post: post)
+        }
         let postIsPublishedOrScheduled = (post.status == .publish || post.status == .scheduled)
         if postIsPublishedOrScheduled && isDotCom {
             openReader(
                 for: post,
                 onFailure: {
                     // If opening the reader fails, just open preview.
-                    openPreview(for: post)
+                    openPreview(for: post, source: source)
                 }
             )
         } else if postIsPublishedOrScheduled {
-            openPreview(for: post)
+            openPreview(for: post, source: source)
         } else {
             openEditor(for: post)
         }
     }
 
-    func navigateToScreen(for page: Page, isDotCom: Bool) {
-        WPAppAnalytics.track(.spotlightSearchOpenedPage, post: page)
+    func navigateToScreen(for page: Page, isDotCom: Bool, source: ItemSource) {
+        if source == .spotlight {
+            WPAppAnalytics.track(.spotlightSearchOpenedPage, post: page)
+        }
         let pageIsPublishedOrScheduled = (page.status == .publish || page.status == .scheduled)
         if pageIsPublishedOrScheduled && isDotCom {
             openReader(
                 for: page,
                 onFailure: {
                     // If opening the reader fails, just open preview.
-                    openPreview(for: page)
+                    openPreview(for: page, source: source)
                 }
             )
         } else if pageIsPublishedOrScheduled {
-            openPreview(for: page)
+            openPreview(for: page, source: source)
         } else {
             openEditor(for: page)
         }
@@ -528,11 +566,11 @@ fileprivate extension SearchManager {
 
     // MARK: - Preview
 
-    func openPreview(for apost: AbstractPost) {
+    func openPreview(for apost: AbstractPost, source: ItemSource) {
         RootViewCoordinator.sharedPresenter.showMySitesTab()
         closePreviewIfNeeded(for: apost)
 
-        let controller = PreviewWebKitViewController(post: apost, source: "spotlight_preview_post")
+        let controller = PreviewWebKitViewController(post: apost, source: source.previewAnalyticsSource)
         controller.trackOpenEvent()
         let navWrapper = UINavigationController(rootViewController: controller)
         let rootViewController = RootViewCoordinator.sharedPresenter.rootViewController
