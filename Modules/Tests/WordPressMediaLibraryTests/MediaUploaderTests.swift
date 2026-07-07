@@ -427,8 +427,7 @@ struct MediaUploaderTests {
         let materialized = MaterializedUpload(
             tempFileURL: pdfURL,
             params: MediaCreateParams(filePath: pdfURL.path),
-            kind: .document,
-            displayName: pdfURL.lastPathComponent
+            kind: .document
         )
         await mock.complete(with: .success(materialized))
 
@@ -475,8 +474,7 @@ struct MediaUploaderTests {
         let materialized = MaterializedUpload(
             tempFileURL: realTemp,
             params: MediaCreateParams(filePath: realTemp.path),
-            kind: .document,
-            displayName: realTemp.lastPathComponent
+            kind: .document
         )
         await mock.complete(with: .success(materialized))
 
