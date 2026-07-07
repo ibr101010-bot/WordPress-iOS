@@ -637,8 +637,7 @@ struct MediaUploaderTests {
         let materialized = MaterializedUpload(
             tempFileURL: realTemp,
             params: MediaCreateParams(filePath: realTemp.path),
-            kind: .document,
-            displayName: realTemp.lastPathComponent
+            kind: .document
         )
         await mock.complete(with: .success(materialized))
         try await Task.sleep(for: .milliseconds(50))
