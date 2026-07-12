@@ -9,11 +9,6 @@
       "encrypt": true
     },
     {
-      "file": "iOS/WPiOS/Secrets-Alpha.swift",
-      "destination": "~/.configure/wordpress-ios/secrets/WordPress-Secrets-Alpha.swift",
-      "encrypt": true
-    },
-    {
       "file": "iOS/JPiOS/Jetpack-Secrets.swift",
       "destination": "~/.configure/wordpress-ios/secrets/Jetpack-Secrets.swift",
       "encrypt": true
