@@ -195,11 +195,30 @@ before_all do |lane|
   # Fixes weird Keychain bugs
   setup_ci
 
+  # Decrypt secrets so every lane can rely on them. Cheap and redundant on dev
+  # machines; in CI the binary isn't on this process's PATH (install-secrets.sh
+  # already decrypted them), so configure_secrets no-ops via its is_ci branch.
+  configure_secrets unless lane == :configure_secrets
+
   # Check that the env files exist
   unless is_ci || File.file?(USER_ENV_FILE_PATH)
     example_path = 'fastlane/env/user.env-example '
     UI.user_error! "#{ENV_FILE_NAME} not found: Please copy #{example_path} to #{USER_ENV_FILE_PATH} and fill in the values."
   end
+end
+
+# Decrypt the app secrets using `a8c-secrets`.
+lane :configure_secrets do
+  unless FastlaneCore::CommandExecutor.which('a8c-secrets')
+    if is_ci
+      UI.important('`a8c-secrets` was not found on the PATH, but given CI execution was detected, we assume secrets have already been decrypted. See https://linear.app/a8c/issue/AINFRA-2681.')
+      next
+    else
+      UI.user_error!('`a8c-secrets` was not found on your PATH. See https://github.com/Automattic/a8c-secrets for installation and usage instructions.')
+    end
+  end
+
+  sh('a8c-secrets', 'decrypt')
 end
 
 def compute_release_branch_name(options:, version: release_version_current)
