@@ -28,6 +28,7 @@ public enum FeatureFlag: Int, CaseIterable {
     case statsAds
     case customPostTypes
     case mediaLibraryV2
+    case gbkMediaUploadOptimization
 
     /// Returns a boolean indicating if the feature is enabled.
     ///
@@ -89,6 +90,8 @@ public enum FeatureFlag: Int, CaseIterable {
             return BuildConfiguration.current == .debug
         case .mediaLibraryV2:
             return BuildConfiguration.current == .debug
+        case .gbkMediaUploadOptimization:
+            return true
         }
     }
 
@@ -133,6 +136,7 @@ extension FeatureFlag {
         case .statsAds: "Stats Ads Tab"
         case .customPostTypes: "Custom Post Types"
         case .mediaLibraryV2: "Media Library v2"
+        case .gbkMediaUploadOptimization: "Optimize Experimental Block Editor Uploads"
         }
     }
 }
