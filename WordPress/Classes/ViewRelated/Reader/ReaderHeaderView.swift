@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 import WordPressUI
 
 final class ReaderHeaderView: ReaderBaseHeaderView {
