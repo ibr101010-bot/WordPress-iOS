@@ -136,7 +136,7 @@ extension FeatureFlag {
         case .statsAds: "Stats Ads Tab"
         case .customPostTypes: "Custom Post Types"
         case .mediaLibraryV2: "Media Library v2"
-        case .gbkMediaUploadOptimization: "NBE Media Upload Optimization"
+        case .gbkMediaUploadOptimization: "Optimize Experimental Block Editor Uploads"
         }
     }
 }
