@@ -494,9 +494,7 @@ NS_ENUM(NSInteger, SiteSettingsJetpack) {
     __weak __typeof__(self) weakSelf = self;
     _ampSettingCell.onChange = ^(BOOL value){
         weakSelf.blog.settings.ampEnabled = value;
-        BlogSettingsChanges *changes = [BlogSettingsChanges new];
-        changes.ampEnabled = @(value);
-        [weakSelf saveSettingsWithChanges:changes];
+        [weakSelf saveSettings];
         [WPAnalytics trackSettingsChange:@"site_settings" fieldName:@"amp_enabled" value:@(value)];
     };
 
@@ -805,9 +803,7 @@ NS_ENUM(NSInteger, SiteSettingsJetpack) {
     LanguageViewController *languageViewController = [[LanguageViewController alloc] initWithBlog:blog];
     languageViewController.onChange = ^(NSNumber *newLanguageID){
         weakSelf.blog.settings.languageID = newLanguageID;
-        BlogSettingsChanges *changes = [BlogSettingsChanges new];
-        changes.languageID = newLanguageID;
-        [weakSelf saveSettingsWithChanges:changes];
+        [weakSelf saveSettings];
         [WPAnalytics trackSettingsChange:@"site_settings" fieldName:@"language" value:newLanguageID];
     };
 
@@ -880,9 +876,7 @@ NS_ENUM(NSInteger, SiteSettingsJetpack) {
                 if ([weakSelf savingWritingDefaultsIsAvailable]) {
                     [WPAnalytics trackSettingsChange:@"site_settings" fieldName:@"default_post_format"];
 
-                    BlogSettingsChanges *changes = [BlogSettingsChanges new];
-                    changes.defaultPostFormat = status;
-                    [weakSelf saveSettingsWithChanges:changes];
+                    [weakSelf saveSettings];
                 }
             }
         }
@@ -1101,15 +1095,15 @@ NS_ENUM(NSInteger, SiteSettingsJetpack) {
 
 #pragma mark - Saving methods
 
-- (void)saveSettingsWithChanges:(BlogSettingsChanges *)changes
+- (void)saveSettings
 {
-    if (changes.isEmpty) {
+    if (!self.blog.settings.hasChanges) {
         return;
     }
 
     [self showActivityIndicator];
     BlogService *blogService = [[BlogService alloc] initWithCoreDataStack:[ContextManager sharedInstance]];
-    [blogService updateSettingsForBlog:self.blog changes:changes success:^{
+    [blogService updateSettingsForBlog:self.blog success:^{
         [self hideActivityIndicator];
         [NSNotificationCenter.defaultCenter postNotificationName:WPBlogSettingsUpdatedNotification object:nil];
     } failure:^(NSError *error) {
@@ -1179,9 +1173,7 @@ NS_ENUM(NSInteger, SiteSettingsJetpack) {
         [WPAnalytics trackSettingsChange:@"site_settings"
                                fieldName:@"default_category"];
 
-        BlogSettingsChanges *changes = [BlogSettingsChanges new];
-        changes.defaultCategoryID = category.categoryID;
-        [self saveSettingsWithChanges:changes];
+        [self saveSettings];
     }
 }
 

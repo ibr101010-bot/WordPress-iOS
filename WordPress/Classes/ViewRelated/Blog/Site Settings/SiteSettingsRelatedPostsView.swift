@@ -27,19 +27,13 @@ struct RelatedPostsSettingsView: View {
         }
         .toggleStyle(SwitchToggleStyle(tint: Color(UIAppColor.jetpackGreen)))
         .onChange(of: settings.relatedPostsEnabled) {
-            let changes = BlogSettingsChanges()
-            changes.relatedPostsEnabled = NSNumber(value: $1)
-            save(field: "show_related_posts", value: $1, changes: changes)
+            save(field: "show_related_posts", value: $1)
         }
         .onChange(of: settings.relatedPostsShowHeadline) {
-            let changes = BlogSettingsChanges()
-            changes.relatedPostsShowHeadline = NSNumber(value: $1)
-            save(field: "show_related_posts_header", value: $1, changes: changes)
+            save(field: "show_related_posts_header", value: $1)
         }
         .onChange(of: settings.relatedPostsShowThumbnails) {
-            let changes = BlogSettingsChanges()
-            changes.relatedPostsShowThumbnails = NSNumber(value: $1)
-            save(field: "show_related_posts_thumbnail", value: $1, changes: changes)
+            save(field: "show_related_posts_thumbnail", value: $1)
         }
         .navigationTitle(Strings.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -104,10 +98,10 @@ struct RelatedPostsSettingsView: View {
         }
     }
 
-    private func save(field: String, value: Any, changes: BlogSettingsChanges) {
+    private func save(field: String, value: Any) {
         WPAnalytics.trackSettingsChange("related_posts", fieldName: field, value: value)
         isSaving = true
-        BlogService(coreDataStack: ContextManager.shared).updateSettings(for: blog, changes: changes, success: {
+        BlogService(coreDataStack: ContextManager.shared).updateSettings(for: blog, success: {
             isSaving = false
         }, failure: { _ in
             isSaving = false

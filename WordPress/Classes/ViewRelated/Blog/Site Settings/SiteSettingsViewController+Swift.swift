@@ -28,9 +28,7 @@ extension SiteSettingsViewController {
         let view = SiteSettingsPrivacyPicker(blog: blog, selection: blog.siteVisibility) { [weak self] in
             guard let self, self.blog.siteVisibility != $0 else { return }
             self.blog.siteVisibility = $0
-            let changes = BlogSettingsChanges()
-            changes.privacy = NSNumber(value: $0.rawValue)
-            self.saveSettings(with: changes)
+            self.saveSettings()
             self.trackSettingsChange(fieldName: "site_settings", value: $0.rawValue)
         }
         let viewController = UIHostingController(rootView: view)
@@ -153,10 +151,7 @@ extension SiteSettingsViewController {
         let view = TimeZoneSelectorView(selectedValue: timezoneValue) { [weak self] newValue in
             self?.blog.settings?.gmtOffset = newValue.gmtOffset as NSNumber?
             self?.blog.settings?.timezoneString = newValue.timezoneString
-            let changes = BlogSettingsChanges()
-            changes.gmtOffset = newValue.gmtOffset as NSNumber?
-            changes.timezoneString = newValue.timezoneString
-            self?.saveSettings(with: changes)
+            self?.saveSettings()
             self?
                 .trackSettingsChange(
                     fieldName: "timezone",
@@ -190,9 +185,7 @@ extension SiteSettingsViewController {
         }
         pickerViewController.onChange = { [weak self] (_: Bool, newValue: Int) in
             self?.blog.settings?.postsPerPage = newValue as NSNumber?
-            let changes = BlogSettingsChanges()
-            changes.postsPerPage = newValue as NSNumber
-            self?.saveSettings(with: changes)
+            self?.saveSettings()
             self?.trackSettingsChange(fieldName: "posts_per_page", value: newValue as Any)
         }
 
@@ -463,9 +456,7 @@ extension SiteSettingsViewController {
 
             if value != self.blog.settings?.name {
                 self.blog.settings?.name = value
-                let changes = BlogSettingsChanges()
-                changes.name = value
-                self.saveSettings(with: changes)
+                self.saveSettings()
 
                 self.trackSettingsChange(fieldName: "site_title")
             }
@@ -508,9 +499,7 @@ extension SiteSettingsViewController {
 
             if normalizedTagline != self.blog.settings?.tagline {
                 self.blog.settings?.tagline = normalizedTagline
-                let changes = BlogSettingsChanges()
-                changes.tagline = normalizedTagline
-                self.saveSettings(with: changes)
+                self.saveSettings()
 
                 self.trackSettingsChange(fieldName: "tagline")
             }

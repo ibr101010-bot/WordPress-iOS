@@ -135,9 +135,7 @@ open class DateAndTimeFormatSettingsViewController: UITableViewController {
             settingsViewController.onItemSelected = { [weak self] (selected: Any?) in
                 if let newDateFormat = selected as? String {
                     self?.settings.dateFormat = newDateFormat
-                    let changes = BlogSettingsChanges()
-                    changes.dateFormat = newDateFormat
-                    self?.saveSettings(changes)
+                    self?.saveSettings()
                     WPAnalytics.trackSettingsChange("date_format", fieldName: "date_format")
                 }
             }
@@ -171,9 +169,7 @@ open class DateAndTimeFormatSettingsViewController: UITableViewController {
             settingsViewController.onItemSelected = { [weak self] (selected: Any?) in
                 if let newTimeFormat = selected as? String {
                     self?.settings.timeFormat = newTimeFormat
-                    let changes = BlogSettingsChanges()
-                    changes.timeFormat = newTimeFormat
-                    self?.saveSettings(changes)
+                    self?.saveSettings()
                     WPAnalytics.trackSettingsChange("date_format", fieldName: "time_format")
                 }
             }
@@ -193,9 +189,7 @@ open class DateAndTimeFormatSettingsViewController: UITableViewController {
             settingsViewController.onItemSelected = { [weak self] (selected: Any?) in
                 if let newStartOfWeek = selected as? String {
                     self?.settings.startOfWeek = newStartOfWeek
-                    let changes = BlogSettingsChanges()
-                    changes.startOfWeek = newStartOfWeek
-                    self?.saveSettings(changes)
+                    self?.saveSettings()
                     WPAnalytics.trackSettingsChange("date_format",
                                                     fieldName: "start_of_week",
                                                     value: newStartOfWeek as Any)
@@ -224,8 +218,8 @@ open class DateAndTimeFormatSettingsViewController: UITableViewController {
 
     // MARK: - Persistance
 
-    fileprivate func saveSettings(_ changes: BlogSettingsChanges) {
-        service.updateSettings(for: blog, changes: changes,
+    fileprivate func saveSettings() {
+        service.updateSettings(for: blog,
                                success: { SiteStatsInformation.sharedInstance.updateTimeZone() },
                                failure: { [weak self] (error: Error) -> Void in
                                     self?.refreshSettings()

@@ -210,9 +210,7 @@ extension HomeSiteHeaderViewController {
         blog.settings?.name = title
         blogDetailHeaderView.setTitleLoading(true)
 
-        let changes = BlogSettingsChanges()
-        changes.name = title
-        blogService.updateSettings(for: blog, changes: changes, success: { [weak self] in
+        blogService.updateSettings(for: blog, success: { [weak self] in
 
             let notice = Notice(title: title,
                                 message: SiteTitleStrings.titleChangeSuccessfulMessage,
