@@ -1,4 +1,0 @@
-{
-    "message": "A fresh access token must be used to query information about the current user.",
-    "error": "reauthorization_required"
-}
