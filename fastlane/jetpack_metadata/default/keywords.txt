@@ -1,1 +1,0 @@
-wordpress,social,notes,jetpack,writing,geotagging,media,blog,website,blogging,journal
