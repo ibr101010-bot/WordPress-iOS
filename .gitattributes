@@ -1,4 +1,0 @@
-RELEASE-NOTES.txt merge=union
-*.strings diff=localizablestrings
-
-.configure-files/*.enc binary
