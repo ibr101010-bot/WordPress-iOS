@@ -1,1 +1,0 @@
-Thanks for using the Jetpack TestFlight build – please feel free to send us any feedback you might have!
